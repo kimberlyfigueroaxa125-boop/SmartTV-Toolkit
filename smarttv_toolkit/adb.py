@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -21,17 +22,26 @@ class AdbError(RuntimeError):
 
 def find_adb() -> str:
     configured = os.environ.get("ADB_PATH")
-    candidates = [configured, shutil.which("adb")]
-    for candidate in candidates:
+    for candidate in (configured, shutil.which("adb")):
         if candidate and os.path.isfile(candidate):
             return candidate
     raise AdbError("ADB не найден. Установи Android SDK Platform-Tools и добавь adb.exe в PATH или настрой ADB_PATH.")
 
 
 class AdbClient:
+    """Small ADB wrapper restricted to read-only diagnostics and approved tweaks."""
+
     def __init__(self, host: str, port: int = 5555) -> None:
-        self.host = host.strip()
-        self.port = port
+        host = host.strip()
+        if host.count(":") == 1 and host.rsplit(":", 1)[1].isdigit():
+            host, port_text = host.rsplit(":", 1)
+            port = int(port_text)
+        if not re.fullmatch(r"[A-Za-z0-9._:-]+", host):
+            raise AdbError("Некорректный IP-адрес или имя устройства.")
+        if not 1 <= int(port) <= 65535:
+            raise AdbError("Некорректный ADB-порт.")
+        self.host = host
+        self.port = int(port)
         self.serial = f"{self.host}:{self.port}"
 
     @property
@@ -73,16 +83,29 @@ class AdbClient:
         return output
 
     def disconnect(self) -> str:
-        result = subprocess.run([self.adb, "disconnect", self.serial], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15, check=False)
+        try:
+            result = subprocess.run(
+                [self.adb, "disconnect", self.serial],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=15,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise AdbError(str(exc)) from exc
         return (result.stdout + result.stderr).strip()
 
     def info(self) -> DeviceInfo:
         result = self.run("get-state")
         if result.returncode != 0 or result.stdout.strip() != "device":
             raise AdbError(result.stderr.strip() or "Устройство не подключено или не авторизовано")
+
         def prop(name: str) -> str:
             res = self.run("shell", "getprop", name)
             return res.stdout.strip() if res.returncode == 0 else "unknown"
+
         return DeviceInfo(
             serial=self.serial,
             manufacturer=prop("ro.product.manufacturer"),
@@ -92,15 +115,30 @@ class AdbClient:
         )
 
     def shell(self, command: str, timeout: int = 20) -> str:
-        allowed = (
-            "getprop", "pm list packages", "settings get ", "settings put global ",
-            "pm trim-caches ", "cmd package compile ", "cat /proc/meminfo",
-            "df -h", "dumpsys meminfo", "dumpsys cpuinfo",
-        )
+        """Run a narrow, validated command set; rejects shell metacharacters."""
         clean = command.strip()
-        if not clean or not clean.startswith(allowed):
+        if not clean or any(char in clean for char in (";", "|", "&", "`", "$", ">", "<", "\n", "\r")):
             raise AdbError("Команда заблокирована защитным списком.")
-        result = self.run("shell", "sh", "-c", clean, timeout=timeout)
+
+        # Exact command patterns only. No shell chaining/substitution is permitted.
+        allowed_patterns = (
+            r"getprop(?: [A-Za-z0-9._-]+)?",
+            r"pm list packages",
+            r"settings get global (?:window_animation_scale|transition_animation_scale|animator_duration_scale)",
+            r"settings put global (?:window_animation_scale|transition_animation_scale|animator_duration_scale) (?:0|0\.0|0\.5|1|1\.0|1\.5|2|2\.0)",
+            r"pm trim-caches (?:256M|512M|1024M)",
+            r"cmd package compile -m speed-profile -a",
+            r"cat /proc/meminfo",
+            r"df -h",
+            r"dumpsys meminfo(?: [A-Za-z0-9._]+)?",
+            r"dumpsys cpuinfo",
+        )
+        if not any(re.fullmatch(pattern, clean) for pattern in allowed_patterns):
+            raise AdbError("Команда заблокирована защитным списком.")
+
+        # ADB receives the validated command as arguments. No local shell is involved.
+        parts = clean.split()
+        result = self.run("shell", *parts, timeout=timeout)
         output = (result.stdout + result.stderr).strip()
         if result.returncode != 0:
             raise AdbError(output or f"Команда завершилась с кодом {result.returncode}")
