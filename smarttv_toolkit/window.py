@@ -1,13 +1,29 @@
 from __future__ import annotations
 
 from datetime import datetime
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QFont
+
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QFrame, QLabel, QPushButton, QLineEdit,
-    QVBoxLayout, QHBoxLayout, QGridLayout, QStackedWidget, QScrollArea,
-    QProgressBar, QListWidget, QListWidgetItem, QPlainTextEdit, QMessageBox,
-    QCheckBox, QButtonGroup, QSizePolicy, QSpacerItem
+    QButtonGroup,
+    QCheckBox,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QMainWindow,
+    QMessageBox,
+    QPlainTextEdit,
+    QProgressBar,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QSpacerItem,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
 )
 
 APP_STYLE = """
@@ -17,21 +33,17 @@ QFrame#sidebar { background: #07111f; border-right: 1px solid #172a41; }
 QLabel { color: #e8f1ff; }
 QLabel.muted { color: #8ea5c2; }
 QFrame.panel { background: #0a1524; border: 1px solid #1a3049; border-radius: 13px; }
-QFrame.tile { border-radius: 15px; border: 1px solid #23405e; }
 QPushButton { background: #122238; color: #dceaff; border: 1px solid #253d59; border-radius: 9px; padding: 9px 12px; text-align: left; }
 QPushButton:hover { background: #1b3452; border-color: #2b91f0; }
 QPushButton:checked { background: #103e71; border-color: #1c9cff; color: white; }
 QPushButton.primary { background: #087dcc; border: 1px solid #1999ed; color: white; font-weight: 600; }
 QPushButton.primary:hover { background: #1597e8; }
-QPushButton.purple { background: #5d35be; border: 1px solid #a16aff; color: white; font-weight: 600; }
-QPushButton.green { background: #04654f; border: 1px solid #12c99a; color: white; font-weight: 600; }
-QPushButton.gold { background: #775514; border: 1px solid #ffc247; color: white; font-weight: 600; }
 QPushButton.danger { color: #ffb8c0; background: #291825; border-color: #87384a; }
 QLineEdit, QPlainTextEdit, QListWidget { background: #07111e; color: #e8f1ff; border: 1px solid #203750; border-radius: 8px; padding: 8px; selection-background-color: #145da0; }
 QProgressBar { background: #142b42; border: 0; border-radius: 5px; height: 9px; text-align: center; color: transparent; }
 QProgressBar::chunk { background: #138cf0; border-radius: 5px; }
 QCheckBox { color: #bdd0e8; spacing: 8px; }
-QScrollArea { border: 0; }
+QScrollArea { border: 0; background: transparent; }
 QScrollBar:vertical { background: #091422; width: 8px; margin: 0; }
 QScrollBar::handle:vertical { background: #27425f; border-radius: 4px; min-height: 22px; }
 """
@@ -133,8 +145,7 @@ class MainWindow(QMainWindow):
         theme = QHBoxLayout()
         theme.addWidget(self._label("◐   Тёмная тема", 9))
         theme.addStretch(1)
-        theme_tag = self._label("ON", 9, True, "#21c3ff")
-        theme.addWidget(theme_tag)
+        theme.addWidget(self._label("ON", 9, True, "#21c3ff"))
         side.addLayout(theme)
 
         content = QWidget()
@@ -167,6 +178,7 @@ class MainWindow(QMainWindow):
     def _scroll(self, child: QWidget) -> QScrollArea:
         area = QScrollArea()
         area.setWidgetResizable(True)
+        area.setFrameShape(QFrame.NoFrame)
         area.setWidget(child)
         return area
 
@@ -192,7 +204,6 @@ class MainWindow(QMainWindow):
         hero_left.addSpacing(6)
         hero_left.addLayout(pills)
         hero_layout.addLayout(hero_left, 3)
-        hero_layout.addStretch(1)
         hero_art = self._label("◈\nSMART\nTV", 18, True, "#45b9ff")
         hero_art.setAlignment(Qt.AlignCenter)
         hero_art.setStyleSheet("background:#0b1425;border:1px solid #2a5882;border-radius:14px;padding:14px;color:#54beff;")
@@ -200,7 +211,7 @@ class MainWindow(QMainWindow):
         hero_layout.addWidget(hero_art, 1)
         root.addWidget(hero)
 
-        # Dashboard body: data overview and utility rail.
+        # Make the dashboard responsive: one content column plus a utility rail.
         grid = QGridLayout()
         grid.setSpacing(10)
         root.addLayout(grid, 1)
@@ -224,6 +235,7 @@ class MainWindow(QMainWindow):
         for i, (glyph, title, desc, color, action) in enumerate(tiles_data):
             tile = QFrame()
             tile.setMinimumHeight(162)
+            tile.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
             tile.setStyleSheet(f"QFrame {{ background:#0a1b2e; border:1px solid {color}; border-radius:14px; }}")
             tv = QVBoxLayout(tile)
             tv.setContentsMargins(13, 12, 13, 12)
@@ -235,16 +247,9 @@ class MainWindow(QMainWindow):
             tv.addWidget(lbl)
             tv.addStretch(1)
             btn = QPushButton(action + "    ›")
-            btn.setProperty("class", "primary")
             btn.setStyleSheet(f"background:{color};color:white;border:1px solid {color};border-radius:8px;padding:8px;font-weight:600;")
-            if i == 0:
-                btn.clicked.connect(lambda: self._show_page("Оптимизация"))
-            elif i == 1:
-                btn.clicked.connect(lambda: self._show_page("Оптимизация"))
-            elif i == 2:
-                btn.clicked.connect(lambda: self._show_page("Настройки системы"))
-            else:
-                btn.clicked.connect(lambda: self._show_page("Анализ системы"))
+            target = ["Оптимизация", "Оптимизация", "Настройки системы", "Анализ системы"][i]
+            btn.clicked.connect(lambda checked=False, page=target: self._show_page(page))
             tv.addWidget(btn)
             tiles.addWidget(tile, i // 2, i % 2)
         left_col.addLayout(tiles)
@@ -252,8 +257,7 @@ class MainWindow(QMainWindow):
         device_panel, device_layout = self._panel("▣   Информация об устройстве")
         refresh_btn = QPushButton("↻  Обновить")
         refresh_btn.clicked.connect(self._refresh_device_info)
-        refresh_row = device_layout.itemAt(0).layout()
-        refresh_row.addWidget(refresh_btn)
+        device_layout.itemAt(0).layout().addWidget(refresh_btn)
         info_grid = QGridLayout()
         self.device_values: dict[str, QLabel] = {}
         for col, (key, label) in enumerate([("brand", "Бренд"), ("model", "Модель"), ("device", "Устройство"), ("android", "Android"), ("sdk", "SDK")]):
@@ -294,13 +298,12 @@ class MainWindow(QMainWindow):
         left_col.addWidget(perf_panel)
 
         recommend_panel, recommend_layout = self._panel("★   Рекомендуемые действия")
-        recommendations = [
+        for glyph, title, desc in [
             ("▦", "Проверить приложения", "Ничего не удаляется автоматически."),
             ("◈", "Оптимизировать анимации", "Настройки можно вернуть обратно."),
             ("▤", "Создать резервную копию", "Сохранить состояние перед изменениями."),
             ("⌕", "Проверить устройство", "Определить Android и модель через ADB."),
-        ]
-        for glyph, title, desc in recommendations:
+        ]:
             row = QHBoxLayout()
             symbol = self._label(glyph, 16, True, "#20baff")
             symbol.setFixedWidth(24)
@@ -354,9 +357,8 @@ class MainWindow(QMainWindow):
 
         grid.addWidget(left, 0, 0, 1, 3)
         grid.addWidget(right, 0, 3, 1, 1)
-        grid.setColumnStretch(0, 1)
-        grid.setColumnStretch(1, 1)
-        grid.setColumnStretch(2, 1)
+        for col in range(3):
+            grid.setColumnStretch(col, 1)
         grid.setColumnStretch(3, 0)
         return self._scroll(outer)
 
@@ -364,7 +366,7 @@ class MainWindow(QMainWindow):
         outer = QWidget()
         layout = QVBoxLayout(outer)
         layout.setContentsMargins(0, 0, 0, 0)
-        p, pv = self._panel("Подключение Android TV")
+        panel, pv = self._panel("Подключение Android TV")
         pv.addWidget(self._label("Введи IP телевизора. На ТВ должны быть включены параметры разработчика и ADB по сети.", 10, False, "#8ea5c2"))
         self.connection_ip = QLineEdit()
         self.connection_ip.setPlaceholderText("192.168.1.50")
@@ -378,8 +380,8 @@ class MainWindow(QMainWindow):
         disconnect.clicked.connect(self._disconnect_device)
         row.addWidget(disconnect)
         pv.addLayout(row)
-        pv.addWidget(self._label("Подключение по USB можно будет добавить, когда будут определены и проверены команды Platform Tools.", 9, False, "#8ea5c2"))
-        layout.addWidget(p)
+        pv.addWidget(self._label("USB ADB и дополнительные методы подключения добавим после проверки конкретного устройства.", 9, False, "#8ea5c2"))
+        layout.addWidget(panel)
         layout.addStretch(1)
         return outer
 
@@ -388,7 +390,7 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(outer)
         layout.setContentsMargins(0, 0, 0, 0)
         panel, pv = self._panel("Сканирование системы")
-        pv.addWidget(self._label("Собираем только диагностическую информацию. Ничего не отключается и не удаляется.", 10, False, "#8ea5c2"))
+        pv.addWidget(self._label("Собираем диагностическую информацию. Ничего не отключается и не удаляется.", 10, False, "#8ea5c2"))
         self.analysis_output = QPlainTextEdit()
         self.analysis_output.setReadOnly(True)
         self.analysis_output.setPlaceholderText("Подключи телевизор и нажми «Начать анализ»...")
@@ -413,21 +415,21 @@ class MainWindow(QMainWindow):
         notice.setStyleSheet("QFrame { background:#211b13;border:1px solid #725728;border-radius:12px; }")
         nv = QVBoxLayout(notice)
         nv.addWidget(self._label("⚠  Сначала диагностика, потом оптимизация", 13, True, "#ffd27d"))
-        nv.addWidget(self._label("Изменения обратимы, но поддержка команд зависит от прошивки. Не отключаем системные пакеты автоматически.", 9, False, "#c8b48b"))
+        nv.addWidget(self._label("Изменения обратимы, но поддержка команд зависит от прошивки. Системные пакеты не отключаются автоматически.", 9, False, "#c8b48b"))
         layout.addWidget(notice)
         panel, pv = self._panel("Turbo Mode")
-        pv.addWidget(self._label("Выбери профиль. До применения программа покажет перечень конкретных изменений.", 10, False, "#8ea5c2"))
+        pv.addWidget(self._label("Выбери профиль. Перед применением программа покажет перечень конкретных изменений.", 10, False, "#8ea5c2"))
         self.safe_profile = QCheckBox("Safe: отключить анимации интерфейса (обратимо)")
         self.safe_profile.setChecked(True)
         pv.addWidget(self.safe_profile)
-        self.cache_profile = QCheckBox("Очистить кеш Android (системная команда, если поддерживается)")
+        self.cache_profile = QCheckBox("Попросить Android очистить кеш (если поддерживается)")
         pv.addWidget(self.cache_profile)
-        self.compile_profile = QCheckBox("Оптимизировать установленные приложения штатным компилятором Android")
+        self.compile_profile = QCheckBox("Оптимизировать приложения штатным компилятором Android")
         pv.addWidget(self.compile_profile)
         self.preview_output = QPlainTextEdit()
         self.preview_output.setReadOnly(True)
         self.preview_output.setMaximumHeight(110)
-        self.preview_output.setPlainText("Изменения появятся после подключения устройства и предпросмотра.")
+        self.preview_output.setPlainText("Изменения появятся после предпросмотра.")
         pv.addWidget(self.preview_output)
         preview = QPushButton("Показать план изменений")
         preview.clicked.connect(self._preview_optimization)
@@ -448,7 +450,7 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(outer)
         layout.setContentsMargins(0, 0, 0, 0)
         panel, pv = self._panel("Установленные приложения")
-        pv.addWidget(self._label("На первом этапе отображаем список приложений. Массовое удаление не выполняется.", 9, False, "#8ea5c2"))
+        pv.addWidget(self._label("Показываем список установленных приложений. Автоматическое массовое удаление не выполняется.", 9, False, "#8ea5c2"))
         self.apps_list = QListWidget()
         pv.addWidget(self.apps_list, 1)
         row = QHBoxLayout()
@@ -464,16 +466,16 @@ class MainWindow(QMainWindow):
         return outer
 
     def _settings_page(self) -> QWidget:
-        return self._placeholder_page("Настройки системы", "Позже сюда добавим проверяемые настройки системы, локальные копии текущих значений и откат. Слепое изменение свойств Android запрещено.")
+        return self._placeholder_page("Настройки системы", "Здесь будут проверяемые настройки системы, локальные копии текущих значений и откат. Слепое изменение свойств Android запрещено.")
 
     def _tools_page(self) -> QWidget:
         outer = QWidget()
         layout = QVBoxLayout(outer)
         layout.setContentsMargins(0, 0, 0, 0)
         panel, pv = self._panel("Инструменты устройства")
-        pv.addWidget(self._label("ADB Shell работает только после успешного подключения. Выполняй команды, которые понимаешь.", 9, False, "#8ea5c2"))
+        pv.addWidget(self._label("Диагностическая консоль работает после подключения и принимает только команды из безопасного списка.", 9, False, "#8ea5c2"))
         self.shell_command = QLineEdit()
-        self.shell_command.setPlaceholderText("Команда adb shell, например getprop ro.build.version.release")
+        self.shell_command.setPlaceholderText("getprop ro.build.version.release")
         pv.addWidget(self.shell_command)
         run = QPushButton("Выполнить диагностическую команду")
         run.clicked.connect(self._run_shell)
@@ -489,12 +491,12 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(outer)
         layout.setContentsMargins(0, 0, 0, 0)
         panel, pv = self._panel("Резервные копии и восстановление")
-        pv.addWidget(self._label("До внедрения низкоуровневых изменений будем сохранять поддерживаемые настройки на ПК. Это не копия прошивки.", 9, False, "#8ea5c2"))
-        create = QPushButton("Создать локальную резервную копию отчёта")
+        pv.addWidget(self._label("Можно сохранить диагностический отчёт на ПК. Это не копия прошивки или всех настроек телевизора.", 9, False, "#8ea5c2"))
+        create = QPushButton("Сохранить отчёт")
         create.clicked.connect(self._export_report)
         pv.addWidget(create)
         self.backup_list = QListWidget()
-        self.backup_list.addItem("Резервные копии устройства пока не созданы")
+        self.backup_list.addItem("Резервных копий пока нет")
         pv.addWidget(self.backup_list, 1)
         layout.addWidget(panel, 1)
         return outer
@@ -541,11 +543,10 @@ class MainWindow(QMainWindow):
             self.log_output.appendPlainText(line)
 
     def _client(self):
-        from smarttv_toolkit.adb import AdbClient, AdbError
-        ip = getattr(self, "ip_edit", None)
-        host = ip.text().strip() if ip else ""
-        if not host:
-            host = self.connection_ip.text().strip() if hasattr(self, "connection_ip") else ""
+        from smarttv_toolkit.adb import AdbClient
+        host = self.ip_edit.text().strip()
+        if not host and hasattr(self, "connection_ip"):
+            host = self.connection_ip.text().strip()
         if not host:
             QMessageBox.warning(self, "Нет IP-адреса", "Введи IP-адрес телевизора.")
             return None
@@ -556,18 +557,18 @@ class MainWindow(QMainWindow):
             return None
 
     def _connect_device(self, host: str | None = None) -> None:
-        if host is None:
+        if not host:
             host = self.ip_edit.text().strip()
         if not host:
             QMessageBox.warning(self, "Подключение", "Укажи IP-адрес Android TV.")
             return
-        from smarttv_toolkit.adb import AdbClient, AdbError
+        from smarttv_toolkit.adb import AdbClient
         client = AdbClient(host)
         try:
             client.connect()
             info = client.info()
             self.connected = True
-            self.connection_status.setText(f"Подключено: {host}:5555")
+            self.connection_status.setText(f"●  Подключено: {client.serial}")
             self.connection_status.setStyleSheet("color:#18d59b;font-weight:600")
             for key, value in [
                 ("brand", info.manufacturer), ("model", info.model),
@@ -575,6 +576,8 @@ class MainWindow(QMainWindow):
                 ("android", info.android), ("sdk", self._get_prop(client, "ro.build.version.sdk")),
             ]:
                 self.device_values[key].setText(value or "Неизвестно")
+            if hasattr(self, "connection_ip"):
+                self.connection_ip.setText(host)
             self._log(f"Подключено устройство: {info.manufacturer} {info.model} / Android {info.android}")
             if hasattr(self, "analysis_output"):
                 self.analysis_output.setPlainText(f"Устройство: {info.manufacturer} {info.model}\nAndroid: {info.android}\nIP: {host}")
@@ -585,12 +588,12 @@ class MainWindow(QMainWindow):
 
     def _disconnect_device(self) -> None:
         host = self.ip_edit.text().strip()
-        if host:
-            try:
-                from smarttv_toolkit.adb import AdbClient
+        try:
+            from smarttv_toolkit.adb import AdbClient
+            if host:
                 AdbClient(host).disconnect()
-            except Exception:
-                pass
+        except Exception:
+            pass
         self.connected = False
         self.connection_status.setText("Устройство не подключено")
         self.connection_status.setStyleSheet("color:#f6bd4b")
@@ -603,24 +606,20 @@ class MainWindow(QMainWindow):
             return "не поддерживается"
 
     def _refresh_device_info(self) -> None:
-        host = self.ip_edit.text().strip()
-        if not host:
-            QMessageBox.information(self, "Обновление", "Сначала подключи телевизор.")
-            return
-        self._connect_device(host)
+        self._connect_device(self.ip_edit.text().strip())
 
     def _run_analysis(self) -> None:
         client = self._client()
         if client is None:
             return
         try:
-            text = client.shell("getprop")
+            props = client.shell("getprop")
             packages = client.shell("pm list packages")
             mem = client.shell("cat /proc/meminfo")
             report = (
                 "SMARTTV TOOLKIT • SYSTEM REPORT\n"
                 f"Generated: {datetime.now().isoformat(timespec='seconds')}\n\n"
-                f"PROPERTIES\n{text[:12000]}\n\n"
+                f"PROPERTIES\n{props[:12000]}\n\n"
                 f"INSTALLED PACKAGES\n{packages[:12000]}\n\n"
                 f"MEMORY\n{mem[:4000]}\n"
             )
@@ -632,8 +631,7 @@ class MainWindow(QMainWindow):
     def _preview_optimization(self) -> None:
         steps = []
         if self.safe_profile.isChecked():
-            steps.append("• Запомнить текущие масштабы анимации")
-            steps.append("• Установить 0 для оконных/переходных анимаций")
+            steps.extend(["• Считать и запомнить текущие масштабы анимации", "• Установить 0 для оконных/переходных анимаций"])
         if self.cache_profile.isChecked():
             steps.append("• Запросить у Android обрезку кеша до 512 MiB")
         if self.compile_profile.isChecked():
@@ -649,24 +647,22 @@ class MainWindow(QMainWindow):
         if not plan or plan.startswith("Изменения появятся") or plan == "Ничего не выбрано.":
             QMessageBox.information(self, "Turbo Mode", "Сначала нажми «Показать план изменений».")
             return
-        if QMessageBox.question(self, "Подтверждение", "Применить показанные настройки к подключённому Android TV?") != QMessageBox.Yes:
+        if QMessageBox.question(self, "Подтверждение", "Применить показанный план к подключённому Android TV?") != QMessageBox.Yes:
             return
         try:
             from smarttv_toolkit.optimizer import TvOptimizer
             optimizer = TvOptimizer(client)
             messages = []
-            original_scales = optimizer.read_animation_scales()
+            self.animation_restore_values = optimizer.read_animation_scales()
             if self.safe_profile.isChecked():
                 result = optimizer.apply_fast_ui()
                 messages.extend(result.changed)
                 messages.extend(f"Пропущено: {x}" for x in result.skipped)
-                self.animation_restore_values = original_scales
             if self.cache_profile.isChecked():
-                messages.append(optimizer.trim_caches() or "Кеш очищен (системная команда завершена)")
+                messages.append(optimizer.trim_caches() or "Команда очистки кеша завершена")
             if self.compile_profile.isChecked():
                 messages.append(optimizer.compile_apps() or "Команда оптимизации приложений завершена")
-            output = "\n".join(messages) or "Изменений не было."
-            QMessageBox.information(self, "Turbo Mode завершён", output[:3000])
+            QMessageBox.information(self, "Turbo Mode завершён", "\n".join(messages)[:3000] or "Изменений не было.")
             self._log("Применена оптимизация")
         except Exception as exc:
             QMessageBox.critical(self, "Ошибка оптимизации", str(exc))
@@ -679,8 +675,7 @@ class MainWindow(QMainWindow):
         saved = getattr(self, "animation_restore_values", None)
         try:
             from smarttv_toolkit.optimizer import TvOptimizer
-            optimizer = TvOptimizer(client)
-            result = optimizer.restore_ui(saved)
+            result = TvOptimizer(client).restore_ui(saved)
             QMessageBox.information(self, "Восстановление", "\n".join(result.changed + result.skipped))
             self._log("Восстановлены настройки анимации")
         except Exception as exc:
@@ -697,7 +692,7 @@ class MainWindow(QMainWindow):
                 package = line.strip().removeprefix("package:")
                 if package:
                     self.apps_list.addItem(package)
-            self._log(f"Список пакетов получен: {self.apps_list.count()}")
+            self._log(f"Получен список пакетов: {self.apps_list.count()}")
         except Exception as exc:
             QMessageBox.critical(self, "Приложения", str(exc))
 
@@ -715,10 +710,9 @@ class MainWindow(QMainWindow):
         command = self.shell_command.text().strip()
         if not command:
             return
-        # This diagnostic console accepts a small explicit allow-list only.
         allowed = ("getprop", "pm list packages", "settings get ", "dumpsys meminfo", "df -h", "cat /proc/meminfo")
         if not command.startswith(allowed):
-            QMessageBox.warning(self, "Ограничение", "Разрешены только диагностические команды из списка в README.")
+            QMessageBox.warning(self, "Ограничение", "Разрешены только диагностические команды: getprop, pm list packages, settings get, dumpsys meminfo, df -h, cat /proc/meminfo.")
             return
         try:
             self.shell_output.setPlainText(client.shell(command))
@@ -732,9 +726,9 @@ class MainWindow(QMainWindow):
         elif action == "Открыть ADB Shell":
             self._show_page("Инструменты")
         elif action == "Перезагрузить устройство":
-            QMessageBox.information(self, "Перезагрузка", "Эта функция будет включена после отдельной проверки безопасной команды reboot.")
+            QMessageBox.information(self, "Перезагрузка", "Перезагрузка будет добавлена после отдельной проверки безопасной команды.")
         elif action == "Сделать скриншот":
-            QMessageBox.information(self, "Скриншот", "Сначала подключись к устройству. Команда захвата будет добавлена после теста на реальном ТВ.")
+            QMessageBox.information(self, "Скриншот", "Команда скриншота будет добавлена и проверена на реальном устройстве.")
         else:
             QMessageBox.information(self, action, "Подключи устройство, чтобы выполнить действие.")
 
