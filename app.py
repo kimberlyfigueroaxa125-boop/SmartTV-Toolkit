@@ -180,8 +180,15 @@ class Window(QMainWindow):
             QMessageBox.warning(self, "Optimization", str(e))
 
     def cleanup_view(self):
-        self.show_apps()
-        QMessageBox.information(self, "Quick Cleanup", "The package list is shown below. SmartTV Toolkit never removes packages automatically.")
+        try:
+            self.show_apps()
+            actions = ["Disable a package (reversible)", "Uninstall for user 0 (reversible by reinstall/reset)"]
+            choice, ok = QInputDialog.getItem(self, "Quick Cleanup", "Choose an explicit action:", actions, 0, False)
+            if not ok:
+                return
+            self.package_action("disable" if choice.startswith("Disable") else "uninstall")
+        except Exception as e:
+            QMessageBox.warning(self, "Quick Cleanup", str(e))
 
     def analyze(self):
         try:
@@ -236,8 +243,11 @@ class Window(QMainWindow):
             stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
             folder = BACKUPS / stamp
             folder.mkdir(parents=True)
-            (folder / "getprop.json").write_text(json.dumps(self.adb.props(), indent=2, ensure_ascii=False), encoding="utf-8")
+            props = self.adb.props()
+            settings = {name: self.adb.shell(f"settings get global {name}") for name in ("window_animation_scale", "transition_animation_scale", "animator_duration_scale")}
+            (folder / "getprop.json").write_text(json.dumps(props, indent=2, ensure_ascii=False), encoding="utf-8")
             (folder / "packages.txt").write_text("\n".join(self.adb.packages()), encoding="utf-8")
+            (folder / "settings.json").write_text(json.dumps(settings, indent=2), encoding="utf-8")
             self.ui.output.setPlainText(f"Backup created:\n{folder}")
             self.status("Backup created", True)
             log(f"Backup created: {folder}")
@@ -245,10 +255,23 @@ class Window(QMainWindow):
             QMessageBox.warning(self, "Backup", str(e))
 
     def restore(self):
-        folder = QFileDialog.getExistingDirectory(self, "Select backup")
-        if folder:
-            self.ui.output.setPlainText(f"Backup selected:\n{folder}\n\nPackage state is never blindly restored. Use the package controls to make explicit changes.")
-            log(f"Restore selected: {folder}")
+        try:
+            self.require_device()
+            folder = QFileDialog.getExistingDirectory(self, "Select backup", str(BACKUPS))
+            if not folder:
+                return
+            settings_file = Path(folder) / "settings.json"
+            if not settings_file.exists():
+                raise RuntimeError("This backup has no reversible settings snapshot.")
+            settings = json.loads(settings_file.read_text(encoding="utf-8"))
+            for name, value in settings.items():
+                if value not in ("null", "", None):
+                    self.adb.shell(f"settings put global {name} {value}")
+            self.ui.output.setPlainText(f"Restored reversible performance settings from:\n{folder}")
+            self.status("Backup settings restored", True)
+            log(f"Restored settings: {folder}")
+        except Exception as e:
+            QMessageBox.warning(self, "Restore", str(e))
 
     def open_shell(self):
         try:
