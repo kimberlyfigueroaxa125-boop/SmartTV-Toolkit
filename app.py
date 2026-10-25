@@ -2,15 +2,12 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QThread, Signal, Slot
-from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QApplication, QMainWindow, QMessageBox, QListWidgetItem, QFileDialog
+from PySide6.QtWidgets import QApplication, QMainWindow, QMessageBox, QFileDialog, QInputDialog
 from PySide6.QtUiTools import QUiLoader
 
 ROOT = Path(__file__).resolve().parent
@@ -20,9 +17,14 @@ LOG = DATA / "operations.log"
 DATA.mkdir(exist_ok=True)
 BACKUPS.mkdir(exist_ok=True)
 
+THEMES = {
+    "midnight": "QWidget{background:#07101c;color:#dbeafe;} QPushButton{background:#102a43;color:#e5f3ff;border:1px solid #214361;border-radius:10px;padding:11px 16px;} QPushButton:hover{background:#12416a;} QPlainTextEdit{background:#081827;color:#cfe6fa;border:1px solid #17324c;border-radius:12px;}",
+    "ocean": "QWidget{background:#06151d;color:#d9f7ff;} QPushButton{background:#0b3948;color:#e5fbff;border:1px solid #176477;border-radius:10px;padding:11px 16px;} QPushButton:hover{background:#0e5063;} QPlainTextEdit{background:#071e28;color:#d9f7ff;border:1px solid #165064;border-radius:12px;}",
+    "graphite": "QWidget{background:#111315;color:#eeeeee;} QPushButton{background:#262a2e;color:#eeeeee;border:1px solid #41464c;border-radius:10px;padding:11px 16px;} QPushButton:hover{background:#333940;} QPlainTextEdit{background:#181b1e;color:#eeeeee;border:1px solid #363b40;border-radius:12px;}",
+}
+
 
 def log(message: str):
-    LOG.parent.mkdir(exist_ok=True)
     with LOG.open("a", encoding="utf-8") as f:
         f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S}  {message}\n")
 
@@ -33,7 +35,8 @@ class Adb:
 
     def run(self, *args, timeout=15):
         try:
-            p = subprocess.run([self.executable, *args], text=True, capture_output=True, timeout=timeout, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            p = subprocess.run([self.executable, *args], text=True, capture_output=True, timeout=timeout,
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         except FileNotFoundError:
             raise RuntimeError("ADB was not found. Install Android platform-tools and add adb.exe to PATH.")
         if p.returncode:
@@ -68,9 +71,6 @@ class Adb:
     def uninstall_user(self, package):
         return self.shell(f"pm uninstall --user 0 {package}")
 
-    def install(self, apk):
-        return self.run("install", "-r", apk, timeout=120)
-
     def reboot(self):
         return self.run("reboot", timeout=10)
 
@@ -80,34 +80,11 @@ class Adb:
         return self.run("pull", remote, str(target), timeout=30)
 
 
-SAFE_ACTIONS = {
-    "reduce_animations": [
-        "settings put global window_animation_scale 0.5",
-        "settings put global transition_animation_scale 0.5",
-        "settings put global animator_duration_scale 0.5",
-    ],
-    "disable_animations": [
-        "settings put global window_animation_scale 0",
-        "settings put global transition_animation_scale 0",
-        "settings put global animator_duration_scale 0",
-    ],
-}
-
-
-class Worker(QObject):
-    finished = Signal(object)
-    failed = Signal(str)
-
-    def __init__(self, fn):
-        super().__init__()
-        self.fn = fn
-
-    @Slot()
-    def run(self):
-        try:
-            self.finished.emit(self.fn())
-        except Exception as e:
-            self.failed.emit(str(e))
+SAFE_ACTIONS = [
+    "settings put global window_animation_scale 0.5",
+    "settings put global transition_animation_scale 0.5",
+    "settings put global animator_duration_scale 0.5",
+]
 
 
 class Window(QMainWindow):
@@ -145,9 +122,7 @@ class Window(QMainWindow):
 
     def status(self, text, good=False):
         self.ui.statusLabel.setText(text)
-        self.ui.statusDot.setProperty("good", good)
-        self.ui.statusDot.style().unpolish(self.ui.statusDot)
-        self.ui.statusDot.style().polish(self.ui.statusDot)
+        self.ui.statusDot.setStyleSheet(f"color:{'#22c55e' if good else '#64748b'};padding:8px;")
 
     def current_adb(self):
         devices = self.adb.devices()
@@ -161,29 +136,20 @@ class Window(QMainWindow):
             self.current_adb()
             props = self.adb.props()
             self.packages = self.adb.packages()
-            brand = props.get("ro.product.brand", "Unknown")
-            model = props.get("ro.product.model", "Unknown")
-            device = props.get("ro.product.device", "Unknown")
-            android = props.get("ro.build.version.release", "Unknown")
-            sdk = props.get("ro.build.version.sdk", "Unknown")
-            self.ui.brandValue.setText(brand)
-            self.ui.modelValue.setText(model)
-            self.ui.deviceValue.setText(device)
-            self.ui.androidValue.setText(android)
-            self.ui.sdkValue.setText(sdk)
+            self.ui.brandValue.setText(props.get("ro.product.brand", "Unknown"))
+            self.ui.modelValue.setText(props.get("ro.product.model", "Unknown"))
+            self.ui.deviceValue.setText(props.get("ro.product.device", "Unknown"))
+            self.ui.androidValue.setText(props.get("ro.build.version.release", "Unknown"))
+            self.ui.sdkValue.setText("SDK " + props.get("ro.build.version.sdk", "Unknown"))
             self.ui.packageValue.setText(str(len(self.packages)))
             self.status(f"Connected • {self.device}", True)
-            self.ui.deviceCard.setVisible(True)
-            log(f"Connected: {brand} {model} / {device}")
-        except Exception as e:
+            log(f"Connected: {props.get('ro.product.brand')} {props.get('ro.product.model')}")
+        except Exception:
             self.device = None
             self.status("Not connected", False)
-            self.ui.brandValue.setText("—")
-            self.ui.modelValue.setText("—")
-            self.ui.deviceValue.setText("—")
-            self.ui.androidValue.setText("—")
-            self.ui.sdkValue.setText("—")
-            self.ui.packageValue.setText("—")
+            for name in ("brandValue", "modelValue", "deviceValue", "androidValue", "packageValue"):
+                getattr(self.ui, name).setText("—")
+            self.ui.sdkValue.setText("SDK —")
 
     def require_device(self):
         if not self.device:
@@ -196,40 +162,36 @@ class Window(QMainWindow):
             log(f"ADB: {command}")
 
     def turbo(self):
-        self.require_device()
-        answer = QMessageBox.question(self, "Turbo Mode", "Apply the safe performance profile?\n\nAnimations will be reduced and no apps will be uninstalled.")
-        if answer != QMessageBox.StandardButton.Yes:
-            return
-        self.run_shell_commands(SAFE_ACTIONS["reduce_animations"])
-        self.ui.turboState.setText("Turbo Mode active")
-        self.status("Turbo Mode applied", True)
+        try:
+            self.require_device()
+            if QMessageBox.question(self, "Turbo Mode", "Apply the safe performance profile?\n\nAnimations will be reduced. No apps will be removed.") != QMessageBox.StandardButton.Yes:
+                return
+            self.run_shell_commands(SAFE_ACTIONS)
+            self.ui.turboState.setText("Turbo Mode active")
+            self.status("Turbo Mode applied", True)
+        except Exception as e:
+            QMessageBox.warning(self, "Turbo Mode", str(e))
 
     def animations(self):
-        self.require_device()
-        self.run_shell_commands(SAFE_ACTIONS["reduce_animations"])
-        self.status("Animations optimized", True)
+        try:
+            self.run_shell_commands(SAFE_ACTIONS)
+            self.status("Animations optimized", True)
+        except Exception as e:
+            QMessageBox.warning(self, "Optimization", str(e))
 
     def cleanup_view(self):
         self.show_apps()
-        QMessageBox.information(self, "Cleanup", "Review the application list first. SmartTV Toolkit never removes packages automatically.")
+        QMessageBox.information(self, "Quick Cleanup", "The package list is shown below. SmartTV Toolkit never removes packages automatically.")
 
     def analyze(self):
         try:
             self.require_device()
             props = self.adb.props()
             packages = self.adb.packages()
-            lines = [
-                f"Brand: {props.get('ro.product.brand', 'Unknown')}",
-                f"Model: {props.get('ro.product.model', 'Unknown')}",
-                f"Android: {props.get('ro.build.version.release', 'Unknown')} (SDK {props.get('ro.build.version.sdk', 'Unknown')})",
-                f"Packages: {len(packages)}",
-                "",
-                "Safe recommendations:",
-                "• Review unused apps before disabling them.",
-                "• Reduce animations for a faster interface.",
-                "• Keep launcher, TV input, Wi-Fi, Bluetooth and remote-control packages protected.",
-                "• Create a backup before advanced changes.",
-            ]
+            lines = [f"Brand: {props.get('ro.product.brand', 'Unknown')}", f"Model: {props.get('ro.product.model', 'Unknown')}",
+                     f"Device: {props.get('ro.product.device', 'Unknown')}", f"Android: {props.get('ro.build.version.release', 'Unknown')} (SDK {props.get('ro.build.version.sdk', 'Unknown')})",
+                     f"Packages: {len(packages)}", "", "Safe recommendations:", "• Review unused apps before disabling them.",
+                     "• Reduce animations for a faster interface.", "• Keep launcher, TV input, Wi-Fi, Bluetooth, audio and remote-control packages protected.", "• Create a backup before advanced changes."]
             self.ui.output.setPlainText("\n".join(lines))
             self.status("Analysis complete", True)
             log("System analysis completed")
@@ -242,8 +204,31 @@ class Window(QMainWindow):
             self.packages = self.adb.packages()
             self.ui.output.setPlainText("\n".join(self.packages))
             self.status(f"Loaded {len(self.packages)} packages", True)
+            log("Package list loaded")
         except Exception as e:
             QMessageBox.warning(self, "Apps", str(e))
+
+    def package_action(self, action):
+        try:
+            self.require_device()
+            package, ok = QInputDialog.getText(self, "Package action", "Package name:")
+            if not ok or not package.strip():
+                return
+            package = package.strip()
+            if package not in self.packages:
+                raise RuntimeError("That package is not installed on the connected TV.")
+            if action == "disable":
+                if QMessageBox.question(self, "Disable package", f"Disable {package} for user 0?\n\nYou can re-enable it later.") != QMessageBox.StandardButton.Yes:
+                    return
+                result = self.adb.disable(package)
+            else:
+                if QMessageBox.question(self, "Uninstall for user 0", f"Uninstall {package} for Android user 0?\n\nThis does not erase the system APK from the firmware.") != QMessageBox.StandardButton.Yes:
+                    return
+                result = self.adb.uninstall_user(package)
+            self.ui.output.appendPlainText(f"\n[{action}] {package}\n{result}")
+            log(f"Package {action}: {package}")
+        except Exception as e:
+            QMessageBox.warning(self, "Package action", str(e))
 
     def backup(self):
         try:
@@ -251,8 +236,7 @@ class Window(QMainWindow):
             stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
             folder = BACKUPS / stamp
             folder.mkdir(parents=True)
-            props = self.adb.props()
-            (folder / "getprop.json").write_text(json.dumps(props, indent=2, ensure_ascii=False), encoding="utf-8")
+            (folder / "getprop.json").write_text(json.dumps(self.adb.props(), indent=2, ensure_ascii=False), encoding="utf-8")
             (folder / "packages.txt").write_text("\n".join(self.adb.packages()), encoding="utf-8")
             self.ui.output.setPlainText(f"Backup created:\n{folder}")
             self.status("Backup created", True)
@@ -262,12 +246,9 @@ class Window(QMainWindow):
 
     def restore(self):
         folder = QFileDialog.getExistingDirectory(self, "Select backup")
-        if not folder:
-            return
-        if not Path(folder).exists():
-            return
-        self.ui.output.setPlainText(f"Backup selected:\n{folder}\n\nRestore is intentionally limited to reversible settings. Package state is never blindly restored.")
-        log(f"Restore selected: {folder}")
+        if folder:
+            self.ui.output.setPlainText(f"Backup selected:\n{folder}\n\nPackage state is never blindly restored. Use the package controls to make explicit changes.")
+            log(f"Restore selected: {folder}")
 
     def open_shell(self):
         try:
@@ -301,10 +282,43 @@ class Window(QMainWindow):
     def show_log(self):
         self.ui.output.setPlainText(LOG.read_text(encoding="utf-8") if LOG.exists() else "No operations yet.")
 
+    def themes(self):
+        names = ["Midnight", "Ocean", "Graphite"]
+        choice, ok = QInputDialog.getItem(self, "Themes", "Choose SmartTV Toolkit theme:", names, 0, False)
+        if ok:
+            self.setStyleSheet(THEMES[choice.lower()])
+            log(f"Toolkit theme: {choice}")
+            self.status(f"Theme: {choice}", True)
+
+    def connection_page(self):
+        try:
+            self.ui.output.setPlainText(self.adb.run("devices") or "No ADB devices found.")
+        except Exception as e:
+            self.ui.output.setPlainText(str(e))
+
+    def tools_page(self):
+        self.ui.output.setPlainText("Tools\n\n• ADB Shell\n• Reboot\n• Screenshot\n• Package inspector\n• Operation logs")
+
     def page_changed(self, row):
         names = ["Home", "Connection", "System Analysis", "Optimization", "Apps", "Themes", "Tools", "Backups", "Logs"]
         if 0 <= row < len(names):
             self.ui.pageTitle.setText(names[row])
+        if row == 1:
+            self.connection_page()
+        elif row == 2:
+            self.analyze()
+        elif row == 3:
+            self.turbo()
+        elif row == 4:
+            self.show_apps()
+        elif row == 5:
+            self.themes()
+        elif row == 6:
+            self.tools_page()
+        elif row == 7:
+            self.ui.output.setPlainText(str(BACKUPS))
+        elif row == 8:
+            self.show_log()
 
 
 def main():
