@@ -1,13 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
 hiddenimports = collect_submodules("PySide6")
+datas = collect_data_files("PySide6", includes=["plugins/platforms/*", "plugins/styles/*"])
 
 a = Analysis(
     ["app.py"],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
@@ -19,9 +20,8 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
     [],
+    exclude_binaries=True,
     name="SmartTV-Toolkit",
     debug=False,
     bootloader_ignore_signals=False,
@@ -29,4 +29,13 @@ exe = EXE(
     upx=True,
     console=False,
     disable_windowed_traceback=False,
+)
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name="SmartTV-Toolkit",
 )
